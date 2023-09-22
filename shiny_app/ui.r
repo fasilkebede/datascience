@@ -25,7 +25,7 @@ dashHeader=dashboardHeader(title = 'Tropical Poultry Genetic Solution (TPGS)',
                            dropdownMenu(
                              type = "notifications",
                              notificationItem(
-                               text = "This is the dashboard for all ACGG dataset",
+                               text = "This is a dashboard for TPGS dataset from ACGG and SAPLING",
                                icon =   icon("warning"),
                                status='warning'
                              ),
@@ -45,17 +45,17 @@ dashHeader=dashboardHeader(title = 'Tropical Poultry Genetic Solution (TPGS)',
                              taskItem(
                                value = 80,
                                color = 'blue' ,
-                               'Based on this result, ACGG II will be launched very soon'
+                               'Based on this result, TPGS results for Kenya and Vietnam will be launched very soon'
                              ),
                              taskItem(
                                value = 90,
                                color = 'green' ,
-                               'Most of the work related to dashboard is accomplished'
+                               'The app will deployed on shinyserver'
                              ),
                              taskItem(
                                value = 50,
                                color = 'red' ,
-                               'What remains to be done is include GIS result in dashboard'
+                               'Show maps of TPGS performance sites'
                              )
                            )       
                            
@@ -64,13 +64,13 @@ dashHeader=dashboardHeader(title = 'Tropical Poultry Genetic Solution (TPGS)',
 dashSidebar=dashboardSidebar(
 
   sidebarMenu(
-    menuItem(text='On farm testing',
+    menuItem(text='On-farm Performance Test',
              tabName = 'onfarm',
              icon=icon('dashboard')),
-    menuItem(text='On station experiment',
+    menuItem(text='On-station Peformance Test',
              tabName = 'onstation',
              icon=icon('dashboard')),
-    menuItem(text='Animated survival plot',
+    menuItem(text='Suvival of chickens',
              tabName='animate',
              icon=icon('dashboard'))
     
@@ -80,8 +80,8 @@ dashBody=dashboardBody(
   
  
   list(
-    actionButton(inputId = "showh", label = "Show hidden text"),
-    actionButton(inputId = "hideh", label = "Hide text"),
+    actionButton(inputId = "showh", label = "Main page"),
+    #actionButton(inputId = "hideh", label = "Hide text"),
     br(),
     hidden(tags$div(id="txt", style='color:blue;', list(helpText("This app is scalable and repeatable. If you want to print this app result, you need 38 pages of word document."),hr())))),
   
@@ -91,11 +91,11 @@ dashBody=dashboardBody(
       fluidRow(
         box( width=3,
              collapsible = TRUE,
-             title='Controls',
+             title='Description',
              status='success',solidHeader = TRUE,
       
              selectInput("country", "Country", choices = c('Ethiopia','Nigeria','Tanzania'),selected='Ethiopia'),
-             selectInput("trait", "Trait", choices = c('wt','eggs'),selected='wt'),
+             selectInput("trait", "Trait", choices = c('Live body weight','Egg productivity'),selected='Live body weight'),
              uiOutput('AEZ'),
              actionButton("gobutton","Toggle the Table")),
         box( width=9,
@@ -148,6 +148,7 @@ dashBody=dashboardBody(
 ui<- dashboardPage(
   header= dashHeader,
   sidebar=dashSidebar,
+  skin = "yellow",
   body=dashBody,
   title=" TPGS Dashboard"
 )
@@ -162,6 +163,10 @@ server <- function(input, output) {
 } # server
 
 onfarm<- read.table("onfarm.txt",h=T)
+
+#convert all character columns to factor ## https://statisticsglobe.com/convert-character-to-factor-in-r
+onfarm <- as.data.frame(unclass(onfarm),
+                        stringsAsFactors = TRUE)
 #Ethiopia
 Ethiopia<- onfarm %>% filter(country=='Ethiopia')
 Ethiopia$Breed[Ethiopia$Breed == 'S-RIR'] <-'SassoXRIR'
@@ -194,6 +199,10 @@ Tanzania$AEZ<- droplevels(Tanzania$AEZ)
 Tanzania$Breed<- droplevels(Tanzania$Breed)
 
 onstation<- read.table("onstation.txt",h=T)
+#convert all character columns to factor ##
+onstation <- as.data.frame(unclass(onstation),
+                        stringsAsFactors = TRUE)
+
 #view(onstation)
 #str(onstation)
 #Ethiopia
@@ -241,6 +250,9 @@ Tanzanias$trait <- droplevels(Tanzanias$trait)
 
 #Survival of chicken
 survdat<- read.table('survdat.txt',h=T)
+#convert all character columns to factor 
+survdat <- as.data.frame(unclass(survdat),
+                        stringsAsFactors = TRUE)
 survdat$Breed <- factor(survdat$Breed)
 survdat$station <- factor(survdat$station)
 survdat$country <- factor(survdat$country)
@@ -267,19 +279,19 @@ server <- function(input, output) {
     if (is.null(input$trait)) {
       return(NULL)
     }
-    if (input$country=='Ethiopia'&input$trait=='wt') {
+    if (input$country=='Ethiopia'&input$trait=='Live body weight') {
       levels(droplevels((Ethiopia %>% filter(trait=='Bwt'))$AEZ))
       
-    }else if (input$country=='Nigeria'&input$trait=='wt'){
+    }else if (input$country=='Nigeria'&input$trait=='Live body weight'){
       levels(droplevels((Nigeria %>% filter(trait=='Bwt'))$AEZ))
       
-    }     else if(input$country=='Tanzania'&input$trait=='wt') {
+    }     else if(input$country=='Tanzania'&input$trait=='Live body weight') {
       levels(droplevels((Tanzania %>% filter(trait=='Bwt'))$AEZ))
       
-    }else if (input$country=='Ethiopia'&input$trait=='eggs'){
+    }else if (input$country=='Ethiopia'&input$trait=='Egg productivity'){
       levels(droplevels((Ethiopia %>% filter(trait=='Egg'))$AEZ))
       
-    }else if (input$country=='Nigeria'&input$trait=='eggs'){
+    }else if (input$country=='Nigeria'&input$trait=='Egg productivity'){
       levels(droplevels((Nigeria %>% filter(trait=='Egg'))$AEZ))
       
     }else {
@@ -308,14 +320,14 @@ server <- function(input, output) {
     dataf<-    datf()
     df=dataf
     ylabs<- c('Number of eggs per bird per year ','Live body weight-at-week-20(g)')
-    if ( input$trait=='eggs'){
+    if ( input$trait=='Egg productivity'){
       ylabc2<- ylabs[1]
       df<- datf() %>% filter(trait=='Egg')
       maxval=df$lsmean +df$Standard_error
       minval=df$lsmean - df$Standard_error
       limits=aes(ymax = maxval, ymin=minval)
     }
-    if ( input$trait=='wt'){
+    if ( input$trait=='Live body weight'){
       ylabc2<- ylabs[2]
       df<- datf() %>% filter(trait=='Bwt')
       maxval=df$lsmean +df$Standard_error
@@ -330,10 +342,10 @@ server <- function(input, output) {
   )
   output$tableDTf <- renderDataTable({
     
-    if( input$trait=='eggs'){
+    if( input$trait=='Egg productivity'){
       df<- datf() %>% filter(trait=='Egg')
     }
-    if( input$trait=='wt'){
+    if( input$trait=='Live body weight'){
       df<- datf() %>% filter(trait=='Bwt')
     }
     na.omit(df[,1:4])
@@ -393,7 +405,7 @@ server <- function(input, output) {
     dataf=dats()
     
     
-    ylabs<- c('Number of eggs per bird per year egg','Live body weight-at-week-20(g)','Feed intake per bird per day(g)')
+    ylabs<- c('Number of eggs per bird per year egg','Live body weight-at-week-20(g)','Rate of feed intake/bird/day(g)')
     if ( input$Trait=='Egg'){
       
       df<- dats() %>% filter(trait=='Egg')
