@@ -1,0 +1,289 @@
+# BLUPF90 UNE Course - Lab 4
+# Daniela Lourenco
+
+
+#1) Modify an existent renumf90 parameter file (or create a new one), according to the data file, to fit the following model: y = sex + animal + e
+echo 'DATAFILE
+data3.txt
+TRAITS
+ 4
+FIELDS_PASSED TO OUTPUT
+
+WEIGHT(S)
+
+RESIDUAL_VARIANCE
+0.6
+EFFECT
+3 cross alpha  #sex
+EFFECT
+1  cross alpha
+RANDOM
+animal
+FILE
+ped3.txt
+FILE_POS
+1 2 3 0 0
+SNP_FILE
+snp3.2k
+PED_DEPTH
+3
+(CO)VARIANCES
+0.4
+OPTION map_file mrkmap.txt' > renum.par
+#___________________________________________________________________________________________________________________________________________________#
+
+#2) run renumf90
+renumf90 renum.par | tee renum.log
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#3) Check renf90.par, renf90.dat, and renaddxx.ped. 
+#   From the renaddxx.ped file, identify genotyped animals, 
+#   and check with wiki (http://nce.ads.uga.edu/wiki/doku.php?id=readme.renumf90) the content of each column. 
+#   What is the content of snp3.2k_XrefID?
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#4) Run preGSf90 including the option to save clean SNP file after quality control. In addition, do include OPTION msg 100 (to have more output on the screen). 
+#   Check the output. Which quality checks for both SNP and animals were done by default? 
+#   Are there any duplicated genotypes? What is the correlation between G and A22? Check averages of G and A22.
+cp renf90.par pre.par
+echo 'OPTION saveCleanSNPs
+OPTION msg 100
+OPTION use_yams' >> pre.par
+
+preGSf90 pre.par | tee pre.log
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#5) Run blupf90+ with the VCE option to estimate variance components under AI-REML and EM-REML. With and without genomics. Compare CPU times across methods:
+# a) No genomics AI-REML
+cp renf90.par par.temp
+grep -v "OPTION" par.temp > ai.par
+echo 'OPTION use_yams
+OPTION method VCE
+OPTION se_covar_function h2 G_2_2_1_1/(G_2_2_1_1+R_1_1)' >> ai.par
+
+time blupf90+ ai.par | tee ai.log
+
+# b) No genomics EM-REML 
+grep -v "OPTION" par.temp > em.par
+echo 'OPTION use_yams
+OPTION method VCE
+OPTION EM-REML -200' >> em.par
+
+time blupf90+ em.par | tee em.log
+
+# c) Genomics AI-REML
+cp renf90.par aig.par
+echo 'OPTION use_yams
+OPTION method VCE
+OPTION se_covar_function h2 G_2_2_1_1/(G_2_2_1_1+R_1_1)
+OPTION no_quality_control' >> aig.par
+sed -i 's:snp3.2k:snp3.2k_clean:g' aig.par
+sed -i 's:mrkmap.txt:mrkmap.txt_clean:g' aig.par
+
+time blupf90+ aig.par | tee aig.log
+
+# d) Genomics EM-REML 
+cp renf90.par emg.par
+echo 'OPTION use_yams
+OPTION method VCE
+OPTION EM-REML -200
+OPTION no_quality_control' >> emg.par
+sed -i 's:snp3.2k:snp3.2k_clean:g' emg.par
+sed -i 's:mrkmap.txt:mrkmap.txt_clean:g' emg.par
+
+time blupf90+ emg.par | tee emg.log
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#6) Run blupf90+ to compute breeding values without SNP information. 
+#   Now run blupf90+ to compute breeding values using genomic information and compare cpu time and solutions. 
+#   Now run both BLUP and ssGBLUP with an option to compute and store reliabilities of breeding values. Save solutions with original ID.
+
+# a) BLUP
+cp renf90.par par.temp
+grep -v "OPTION" par.temp > blup.par
+echo 'OPTION use_yams' >> blup.par
+sed -i 's:0.60000:0.61222:g' blup.par
+sed -i 's:0.40000:0.35532:g' blup.par
+
+time blupf90+ blup.par | tee blup.log
+mv solutions solutions_blup
+
+# b) ssGBLUP
+cp renf90.par ssgblup.par
+echo 'OPTION use_yams
+OPTION no_quality_control' >> ssgblup.par
+sed -i 's:0.60000:0.61222:g' ssgblup.par
+sed -i 's:0.40000:0.35532:g' ssgblup.par
+sed -i 's:snp3.2k:snp3.2k_clean:g' ssgblup.par
+sed -i 's:mrkmap.txt:mrkmap.txt_clean:g' ssgblup.par
+
+time blupf90+ ssgblup.par | tee ssgblup.log
+mv solutions solutions_ssgblup
+
+# c) BLUP - original ID
+cp renf90.par par.temp
+grep -v "OPTION" par.temp > blupr.par
+echo 'OPTION use_yams
+OPTION origID' >> blupr.par
+sed -i 's:0.60000:0.61222:g' blupr.par
+sed -i 's:0.40000:0.35532:g' blupr.par
+
+time blupf90+ blupr.par | tee blupr.log
+mv solutions.orig solutions.orig_blup
+
+
+# d) ssGBLUP - original ID
+cp renf90.par ssgblupr.par
+echo 'OPTION use_yams
+OPTION no_quality_control
+OPTION origID' >> ssgblupr.par
+sed -i 's:0.60000:0.61222:g' ssgblupr.par
+sed -i 's:0.40000:0.35532:g' ssgblupr.par
+sed -i 's:snp3.2k:snp3.2k_clean:g' ssgblupr.par
+sed -i 's:mrkmap.txt:mrkmap.txt_clean:g' ssgblupr.par
+
+time blupf90+ ssgblupr.par | tee ssgblupr.log
+mv solutions.orig solutions.orig_ssgblup
+
+
+#average reliability:
+awk '{ sumf += $5 } END { print sumf/NR }' acc_bf90_blup
+awk '{ sumf += $5 } END { print sumf/NR }' acc_bf90_ssgblup
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#7)  Do a validation on young selection candidates or individuals from the 5th generation with genotypes and no phenotypes. 
+#    Compare EBV and GEBV with true breeding value (TBV). 
+#    Remember that correlation between (G)EBV and a benchmark (i.e., TBV) is a measure of accuracy. 
+#    What happened with accuracy when genomic information was included? 
+#    Check also intercept and regression coefficient from a regression of TBV on EBV and GEBV.
+
+awk '$4!=5' renf90.dat > renf90.dat.reduced
+
+# a) BLUP reduced data - original ID
+cp renf90.par par.temp
+grep -v "OPTION" par.temp > blupred.par
+echo 'OPTION use_yams
+OPTION origID' >> blupred.par
+sed -i 's:0.60000:0.61222:g' blupred.par
+sed -i 's:0.40000:0.35532:g' blupred.par
+sed -i 's:renf90.dat:renf90.dat.reduced:g' blupred.par
+
+time blupf90+ blupred.par | tee blupred.log
+mv solutions.orig solutions.orig_blup_red
+
+# b) ssGBLUP reduced data - original ID
+cp renf90.par ssgblupred.par
+echo 'OPTION use_yams
+OPTION no_quality_control
+OPTION origID' >> ssgblupred.par
+sed -i 's:0.60000:0.61222:g' ssgblupred.par
+sed -i 's:0.40000:0.35532:g' ssgblupred.par
+sed -i 's:snp3.2k:snp3.2k_clean:g' ssgblupred.par
+sed -i 's:mrkmap.txt:mrkmap.txt_clean:g' ssgblupred.par
+sed -i 's:renf90.dat:renf90.dat.reduced:g' ssgblupred.par
+
+time blupf90+ ssgblupred.par | tee ssgblupred.log
+mv solutions.orig solutions.orig_ssgblup_red
+
+#editing solutions
+awk '{print $1,$2,$5}' data3.txt | sort +0 -1 > tbv.temp
+awk '$2==2{print $4,$5}' solutions.orig_blup | sort +0 -1 > sol_blupc.temp
+awk '$2==2{print $4,$5}' solutions.orig_blup_red | sort +0 -1 > sol_blupr.temp
+awk '$2==2{print $4,$5}' solutions.orig_ssgblup | sort +0 -1 > sol_ssgblupc.temp
+awk '$2==2{print $4,$5}' solutions.orig_ssgblup_red | sort +0 -1 > sol_ssgblupr.temp
+join -1 +1 -2 +1 tbv.temp sol_blupr.temp > f1.temp
+join -1 +1 -2 +1 f1.temp sol_ssgblupr.temp > f2.temp
+join -1 +1 -2 +1 f2.temp sol_blupc.temp > f3.temp
+join -1 +1 -2 +1 f3.temp sol_ssgblupc.temp > all.anim
+awk '$2==5{print $0}' all.anim > all.val
+rm *.temp
+
+
+#Bash
+# Correlation TBV - EBV, Regression, R2
+awk 'pass==1 {sx+=$4; sy+=$3; n+=1} pass==2 {mx=sx/(n-1); my=sy/(n-1); cov+=($4-mx)*($3-my); ssdx+=($4-mx)*($4-mx); ssdy+=($3-my)*($3-my);} END {print "TBV - EBV: cor = " cov/(sqrt(ssdx)*sqrt(ssdy)),"b1 = " cov/ssdx,"R^2 = " cov/(sqrt(ssdx)*sqrt(ssdy))*cov/(sqrt(ssdx)*sqrt(ssdy))}' pass=1 all.val pass=2 all.val > Correlations_bash
+# Correlation TBV - GEBV, Regression, R2
+awk 'pass==1 {sx+=$5; sy+=$3; n+=1} pass==2 {mx=sx/(n-1); my=sy/(n-1); cov+=($5-mx)*($3-my); ssdx+=($5-mx)*($5-mx); ssdy+=($3-my)*($3-my);} END {print "TBV - GEBV: cor = " cov/(sqrt(ssdx)*sqrt(ssdy)),"b1 = " cov/ssdx,"R^2 = " cov/(sqrt(ssdx)*sqrt(ssdy))*cov/(sqrt(ssdx)*sqrt(ssdy))}' pass=1 all.val pass=2 all.val >> Correlations_bash
+
+
+#R
+R
+rm(list=ls())
+options(scipen=3)
+dados<-read.table("all.val",header=F)
+names(dados)<-list('ID','gen','TBV','EBVr','GEBVr','EBVc','GEBVc')
+nomes<-names(dados)
+
+# Regressions  all genotyped
+cat('## Validation - Generation 5 ##', file="Correlations",sep=" ",fill=T,append=T)
+for (i in 4:5)
+{   mod_m <- lm(dados$TBV ~ dados[,i])
+    su_m <- summary(mod_m)
+    r2m = round(su_m$r.squared,2)
+    regm = round((coef(su_m)[2,1]),2)
+    com <- round(cor(dados$TBV,dados[,i],use="pairwise.complete.obs"),2)
+
+cat(paste('Correlation  TBV ~ ',nomes[i],':',com), file="Correlations",sep=" ",fill=T,append=T)
+cat(paste('Regression   TBV ~ ',nomes[i],':',regm), file="Correlations",sep=" ",fill=T,append=T)
+cat(paste('R2   TBV ~ ',nomes[i],':',r2m), file="Correlations",sep=" ",fill=T,append=T)
+cat(paste('Number of animals: ',length(unique(dados$ID))), file="Correlations",sep=" ",fill=T,append=T)
+cat(' ', file="Correlations",sep=" ",fill=T,append=T)
+}
+cat(' ', file="Correlations",sep=" ",fill=T,append=T)
+
+#___________________________________________________________________________________________________________________________________________________#
+
+#8) LR Validation: check correlations, intercept, and regression coefficient.
+
+#Bash
+# Correlation TBV - EBV, Regression, R2
+awk 'pass==1 {sx+=$4; sy+=$6; n+=1} pass==2 {mx=sx/(n-1); my=sy/(n-1); cov+=($4-mx)*($6-my); ssdx+=($4-mx)*($4-mx); ssdy+=($6-my)*($6-my);} END {print "EBV - TEBV: b0 = " mx - ((cov/ssdy)*my),"cor = " cov/(sqrt(ssdx)*sqrt(ssdy)),"b1 = " cov/ssdx,"R^2 = " cov/(sqrt(ssdx)*sqrt(ssdy))*cov/(sqrt(ssdx)*sqrt(ssdy))}' pass=1 all.val pass=2 all.val > CorrelationsLR_bash
+# Correlation TBV - GEBV, Regression, R2
+awk 'pass==1 {sx+=$5; sy+=$7; n+=1} pass==2 {mx=sx/(n-1); my=sy/(n-1); cov+=($5-mx)*($7-my); ssdx+=($5-mx)*($5-mx); ssdy+=($7-my)*($7-my);} END {print "EBV - TEBV: b0 = " mx - ((cov/ssdy)*my),"cor = " cov/(sqrt(ssdx)*sqrt(ssdy)),"b1 = " cov/ssdx,"R^2 = " cov/(sqrt(ssdx)*sqrt(ssdy))*cov/(sqrt(ssdx)*sqrt(ssdy))}' pass=1 all.val pass=2 all.val >> CorrelationsLR_bash
+
+
+#R
+R
+rm(list=ls())
+options(scipen=3)
+dados<-read.table("all.val",header=F)
+names(dados)<-list('ID','gen','TBV','EBVr','GEBVr','EBVc','GEBVc')
+nomes<-names(dados)
+
+# Regressions  all genotyped
+cat('## LR Validation - Generation 5 ##', file="CorrelationsLR",sep=" ",fill=T,append=T)
+for (i in 4:4)
+{   mod_m <- lm(dados$EBVc ~ dados[,i])
+    su_m <- summary(mod_m)
+    r2m = round(su_m$r.squared,2)
+    regm = round((coef(su_m)[2,1]),2)
+    com <- round(cor(dados$EBVc,dados[,i],use="pairwise.complete.obs"),2)
+
+cat(paste('Correlation  EBVc ~ ',nomes[i],':',com), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('Regression   EBVc ~ ',nomes[i],':',regm), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('R2   EBVc ~ ',nomes[i],':',r2m), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('Number of animals: ',length(unique(dados$ID))), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(' ', file="CorrelationsLR",sep=" ",fill=T,append=T)
+}
+cat(' ', file="CorrelationsLR",sep=" ",fill=T,append=T)
+
+for (i in 5:5)
+{   mod_m <- lm(dados$GEBVc ~ dados[,i])
+    su_m <- summary(mod_m)
+    r2m = round(su_m$r.squared,2)
+    regm = round((coef(su_m)[2,1]),2)
+    com <- round(cor(dados$GEBVc,dados[,i],use="pairwise.complete.obs"),2)
+
+cat(paste('Correlation  GEBVc ~ ',nomes[i],':',com), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('Regression   GEBVc ~ ',nomes[i],':',regm), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('R2   GEBVc ~ ',nomes[i],':',r2m), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(paste('Number of animals: ',length(unique(dados$ID))), file="CorrelationsLR",sep=" ",fill=T,append=T)
+cat(' ', file="CorrelationsLR",sep=" ",fill=T,append=T)
+}
+
+
