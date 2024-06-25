@@ -1,0 +1,183 @@
+# Author: Fasil Getachew Kebede, Feb 2023
+
+getwd()
+
+## Removes all objects from the current workspace (R memory) ##
+rm(list=ls())
+#install.packages('metan')
+#library(metan)
+
+datafinal <- read.csv('female_acgg_trimmed_180days_with_replication.csv', header = TRUE)
+##
+dim(datafinal)
+head(datafinal,2)
+tail(datafinal)
+names(datafinal)
+# Check variable type- change where needed
+str(datafinal)
+datafinal$aez_3 <- as.factor(datafinal$aez_3) # for SDM-defined agroecology
+datafinal$aez_old <- as.factor(datafinal$aez_old) # for Conventionally-defined agroecology
+datafinal$weight_180 <- as.numeric(datafinal$weight_180)
+datafinal$REP_3_NEW <- as.factor(datafinal$REP_3_NEW)#replicates of SDM-AEZ
+datafinal$REP_OLD <- as.factor(datafinal$REP_OLD)#replicates of CONV-AEZ
+datafinal$age_d <- as.factor(datafinal$age_d)
+datafinal$Strain <- as.factor(datafinal$Strain)
+names(datafinal)
+summary(datafinal)
+#***********************************************************************************************************************************************************
+#A) MODEL COPARISONS
+
+#MIXED MODELS WITH REML/BLUP for multi-environment performance trials
+#https://tiagoolivoto.github.io/metan/articles/vignettes_blup.html
+
+#I. Model1: SDM
+#Fixed effect: ENV; Random effect: GEN, GEN:ENV
+# Diagnostic plot for residuals for fixed effects
+mixedmodel_1<- gamem_met(datafinal,
+                         env = aez_3,
+                         gen = Strain,
+                         rep = REP_3_NEW,
+                         random = "gen",
+                         resp = weight_180)
+plot(mixedmodel_1)
+# All variables with significant (p < 0.05) genotype-vs-environment interaction
+# Get the variance components
+get_model_data(mixedmodel_1, what = "vcomp")
+
+#####
+#***************
+#*#II. Model2: CONVENTIONAL Agroecology classification
+#Fixed effect: ENV; Random effect: GEN, GEN:ENV
+# Diagnostic plot for residuals for fixed effects
+mixedmodel_2<- gamem_met(datafinal,
+                         env = aez_old,
+                         gen = Strain,
+                         rep = REP_OLD,
+                         random = "gen",
+                         resp = weight_180)
+plot(mixedmodel_2)
+# All variables with significant (p < 0.05) genotype-vs-environment interaction
+# Get the variance components
+get_model_data(mixedmodel_2, what = "vcomp")
+
+#to see model fit of the two models
+get_model_data(mixedmodel_1, "lrt") 
+get_model_data(mixedmodel_2, "lrt") 
+
+# B) GAMs MODELS TO VISUALIZE THE RELSTIONSHIP BETWEEN SDM-identified enviromental predictos and BODY WEIGHT 
+#***********************************************************************************************************************************************************
+# Script used to run general additive models and visualize partial dependence plots
+# This was needed to show the relationship between selected environmental predictors and phenotype (body-weight-at-180-days-of-age)
+install.packages('mgcv')
+library(mgcv)
+model3 <- gam(weight_180~s(bio_13)+s(bio_14)+s(bio_19)+s(bio_20)+s(bio_22)+s(bio_24))
+summary(model3)
+
+#
+#Plot visualization
+#onvert the fitted object to the gamViz class
+gam_plot <- getViz(model3)
+
+themeSize <- theme(text = element_text(family = 'serif'),
+                  axis.text = element_text(size = 11),
+                  axis.title = element_text(size = 11),
+                  legend.title = element_text(size = 11),
+                  legend.text = element_text(size = 11))
+
+#Create a figure list with all plots
+figure_1 <- list()
+#plot model to see the order of explanatory variables (bio13/preci of wettest month,
+#bio14/preci of driest month,bio19/preci of coldest qua,bio20/Solar rad May,
+#bio22/wat vap press in May,bio24/Bioelev)
+plot.gam(model3)
+#gam_plot <- plot.gam(model3)
+#use S for smooth terms
+#figure_1 BIO13 Precipitation of the wettest month (mm); p<0.0001; edf =6.86
+figure_1[[1]] <- plot(sm(gam_plot, 1)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Bio13-Preci. wettest month ("*mm/m^2*")"), y = expression(s * "(" * "6.86" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.00")) + 
+  themeSize
+
+#plot  figure_1[[1]]
+figure_1[[1]]
+
+#figure 2 Bio14/Precipitation of the driest month p ,0.0001
+figure_1[[2]] <- plot(sm(gam_plot, 2)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Bio14-Preci. driest month ("*mm/m^2*")"), y = expression(s * "(" * "7.8" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.00")) + 
+  themeSize
+#plot  figure_1[[1]]
+figure_1[[2]]
+
+#figure 3 Bio19/Precipitation of coldest quarter p ,0.001
+figure_1[[3]] <- plot(sm(gam_plot, 3)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Bio19-Preci. coldest quarter("*mm/m^2*")"), y = expression(s * "(" * "1.96" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.001")) + 
+  themeSize
+
+#plot  figure_1[[1]]
+figure_1[[3]]
+
+#figure 4 Bio20/Solar radiation of the month of May  p ,0.000
+figure_1[[4]] <- plot(sm(gam_plot, 4)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Solar radiation in May ("*Kj/m^2/day*")"), y = expression(s * "(" * "6.61" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.00")) + 
+  themeSize
+
+#plot  figure_1[[4]]
+figure_1[[4]]
+
+#figure 5 Water vapour pressure in May (kPa)  p ,0.000
+figure_1[[5]] <- plot(sm(gam_plot, 5)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Water vapour pressu. in May (kPa)"), y = expression(s * "(" * "6.46" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.00")) + 
+  themeSize
+
+#plot  figure_1[[5]]
+figure_1[[5]]
+
+#figure 6 Water vapour pressure in May (kPa)  p ,0.000
+figure_1[[6]] <- plot(sm(gam_plot, 6)) +
+  l_fitLine(linetype = 1, colour = "red") + 
+  l_ciLine(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Bioelevation (m.a.s.l.)"), y = expression(s * "(" * "3.38" * ")")) + 
+  theme_classic() + 
+  ggtitle(~italic("p-value<0.00")) + 
+  themeSize
+
+#plot  figure_1[[5]]
+figure_1[[6]]
+ 
+plot.gam(model3_newaez3_gp)
+
+figure_1[[1]] <- plot(pterm(gam_plot, 1)) +
+  l_fitPoints(size = 1, col = "red") + 
+  l_ciBar(linetype = 3, colour = "blue", level = 0.95) +
+  l_rug() + 
+  labs(x = expression("Precipitation of the wettest month (mm)"), y = expression(c * "(" * "<df>" * ")")) + 
+  scale_x_discrete(labels = c("1" = "<250", "2" = "250-300", "3" = "300-350", "4" = ">350")) + 
+  theme(axis.text.x = element_text(angle = 15, hjust = 1)) +
+  ggtitle(~italic("<p-value>")) + 
+  theme_classic() + 
+  themeSize
